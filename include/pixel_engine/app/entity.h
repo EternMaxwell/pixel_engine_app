@@ -553,6 +553,9 @@ class App {
      * not in same scheduler, this will be ignored when preparing runners.
      * @param afters The systems that should run before this system. If they are
      * not in same scheduler, this will be ignored when preparing runners.
+     * @param in_sets The sets that this system belongs to. This will affect the
+     * sequence of the systems. Systems in same set type but different scheduler
+     * will not be affected by this.
      * @return The App object itself.
      */
     template <typename Sch, typename... Args, typename... Ts>
@@ -577,6 +580,9 @@ class App {
      * not in same scheduler, this will be ignored when preparing runners.
      * @param afters The systems that should run before this system. If they are
      * not in same scheduler, this will be ignored when preparing runners.
+     * @param in_sets The sets that this system belongs to. This will affect the
+     * sequence of the systems. Systems in same set type but different scheduler
+     * will not be affected by this.
      * @return The App object itself.
      */
     template <typename Sch, typename... Args, typename... Ts>
@@ -602,6 +608,9 @@ class App {
      * not in same scheduler, this will be ignored when preparing runners.
      * @param afters The systems that should run before this system. If they are
      * not in same scheduler, this will be ignored when preparing runners.
+     * @param in_sets The sets that this system belongs to. This will affect the
+     * sequence of the systems. Systems in same set type but different scheduler
+     * will not be affected by this.
      * @return The App object itself.
      */
     template <typename Sch, typename... Args, typename... Sets>
@@ -645,6 +654,9 @@ class App {
      * not in same scheduler, this will be ignored when preparing runners.
      * @param afters The systems that should run before this system. If they are
      * not in same scheduler, this will be ignored when preparing runners.
+     * @param in_sets The sets that this system belongs to. This will affect the
+     * sequence of the systems. Systems in same set type but different scheduler
+     * will not be affected by this.
      * @return The App object itself.
      */
     template <typename Sch, typename... Args, typename... Ts>
@@ -670,6 +682,9 @@ class App {
      * not in same scheduler, this will be ignored when preparing runners.
      * @param afters The systems that should run before this system. If they are
      * not in same scheduler, this will be ignored when preparing runners.
+     * @param in_sets The sets that this system belongs to. This will affect the
+     * sequence of the systems. Systems in same set type but different scheduler
+     * will not be affected by this.
      * @return The App object itself.
      */
     template <typename Sch, typename... Args, typename... Ts>
@@ -695,6 +710,9 @@ class App {
     template <
         typename T, std::enable_if_t<std::is_base_of_v<Plugin, T>>* = nullptr>
     App& add_plugin(T plugin) {
+        if (m_plugins.find(typeid(T).hash_code()) != m_plugins.end()) {
+            return *this;
+        }
         plugin.build(*this);
         m_plugins[typeid(T).hash_code()] = std::make_shared<T>(plugin);
         return *this;
