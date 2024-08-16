@@ -14,9 +14,24 @@ if (NOT boost_pfr)
   add_subdirectory(libs/pfr)
 endif()
 
+if (NOT EnTT::EnTT)
+  add_subdirectory(libs/entt)
+endif()
+
+if (NOT spdlog::spdlog)
+  add_subdirectory(libs/spdlog)
+endif()
+
+if (NOT BSThreadPool)
+  add_subdirectory(libs/thread-pool)
+endif()
+
 add_library(app ${HEADERS} ${SOURCES})
 target_include_directories(app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(app boost_pfr)
+target_link_libraries(app EnTT::EnTT)
+target_link_libraries(app spdlog::spdlog)
+target_link_libraries(app BSThreadPool)
 
 set_property(TARGET app PROPERTY CXX_STANDARD 20)
