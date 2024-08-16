@@ -5,7 +5,7 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-project (pixel_engine::app)
+project (pixel_engine_app)
 
 file(GLOB_RECURSE HEADERS "include/*.h" "include/*.hpp")
 file(GLOB_RECURSE SOURCES "src/*.c" "src/*.cpp")
@@ -26,12 +26,14 @@ if (NOT TARGET BSThreadPool)
   add_subdirectory(libs/thread-pool)
 endif()
 
-add_library(app ${HEADERS} ${SOURCES})
-target_include_directories(app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_library(pixel_engine_app ${HEADERS} ${SOURCES})
+target_include_directories(pixel_engine_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-target_link_libraries(app boost_pfr)
-target_link_libraries(app EnTT::EnTT)
-target_link_libraries(app spdlog::spdlog)
-target_link_libraries(app BSThreadPool)
+target_link_libraries(pixel_engine_app boost_pfr)
+target_link_libraries(pixel_engine_app EnTT::EnTT)
+target_link_libraries(pixel_engine_app spdlog::spdlog)
+target_link_libraries(pixel_engine_app BSThreadPool)
 
-set_property(TARGET app PROPERTY CXX_STANDARD 20)
+set_property(TARGET pixel_engine_app PROPERTY CXX_STANDARD 20)
+
+add_library(pixel_engine::app ALIAS pixel_engine_app)
