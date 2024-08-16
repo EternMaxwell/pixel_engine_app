@@ -1,5 +1,0 @@
-E:/Programming/Projects/C++/cmake/pixel_engine_app/out/build/x64-debug/CMakeFiles/app.dir
-E:/Programming/Projects/C++/cmake/pixel_engine_app/out/build/x64-debug/CMakeFiles/edit_cache.dir
-E:/Programming/Projects/C++/cmake/pixel_engine_app/out/build/x64-debug/CMakeFiles/rebuild_cache.dir
-E:/Programming/Projects/C++/cmake/pixel_engine_app/out/build/x64-debug/libs/pfr/CMakeFiles/edit_cache.dir
-E:/Programming/Projects/C++/cmake/pixel_engine_app/out/build/x64-debug/libs/pfr/CMakeFiles/rebuild_cache.dir
