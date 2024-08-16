@@ -10,19 +10,19 @@ project (pixel_engine::app)
 file(GLOB_RECURSE HEADERS "include/*.h" "include/*.hpp")
 file(GLOB_RECURSE SOURCES "src/*.c" "src/*.cpp")
 
-if (NOT boost_pfr) 
+if (NOT TARGET boost_pfr)
   add_subdirectory(libs/pfr)
 endif()
 
-if (NOT EnTT::EnTT)
+if (NOT TARGET EnTT::EnTT)
   add_subdirectory(libs/entt)
 endif()
 
-if (NOT spdlog::spdlog)
+if (NOT TARGET spdlog)
   add_subdirectory(libs/spdlog)
 endif()
 
-if (NOT BSThreadPool)
+if (NOT TARGET BSThreadPool)
   add_subdirectory(libs/thread-pool)
 endif()
 
