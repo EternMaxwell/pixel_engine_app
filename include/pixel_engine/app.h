@@ -18,7 +18,13 @@ using AppExit = entity::AppExit;
 // system node
 using SystemNode = std::shared_ptr<entity::SystemNode>;
 
-// bundle
+/**
+ * @brief Base class for bundle.
+ *
+ * Struct inheriting from this class and has a function named `unpack` which
+ * returns a tuple of the components to be unpacked will be considered as a
+ * bundle.
+ */
 using Bundle = entity::Bundle;
 
 // entity

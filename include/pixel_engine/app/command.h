@@ -26,6 +26,19 @@ struct is_template_of<Template, Template<Args...>> {
 template <typename Q1, typename Q2>
 struct queries_contrary {};
 
+/**
+ * @brief Base class for bundle.
+ * 
+ * ### Usage
+ * 
+ * struct MyBundle : Bundle {
+ *   // your components
+ * 
+ *   auto unpack() {
+ *      return std::tie(/* your components * /);
+ *   }
+ * }
+ */
 struct Bundle {};
 
 struct Parent {
