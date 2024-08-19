@@ -715,6 +715,8 @@ class App {
         }
         plugin.build(*this);
         m_plugins[typeid(T).hash_code()] = std::make_shared<T>(plugin);
+        Command cmd = command();
+        cmd.insert_resource(plugin);
         return *this;
     }
 
@@ -723,13 +725,9 @@ class App {
      * @return The plugin.
      */
     template <typename T>
-    std::shared_ptr<T> get_plugin() {
-        if (m_plugins.find(typeid(T).hash_code()) != m_plugins.end()) {
-            return std::static_pointer_cast<T>(
-                m_plugins[typeid(T).hash_code()]);
-        } else {
-            return nullptr;
-        }
+    Resource<T> get_plugin() {
+        Resource<T> plugin_res = value_type<Resource<T>>::get(this);
+        return plugin_res;
     }
 
     /*! @brief Insert a state.
