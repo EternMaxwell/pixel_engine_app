@@ -97,11 +97,11 @@ class Query<Get<Qus...>, With<Ins...>, Without<Exs...>> {
      * components.
      */
     auto single() {
-        auto start = *(iter().begin());
+        // auto start = *(iter().begin());
         if (iter().begin() != iter().end()) {
-            return std::optional(start);
+            return std::optional(*(iter().begin()));
         } else {
-            return std::optional<decltype(start)>{};
+            return std::optional<decltype(*(iter().begin()))>{};
         }
     }
 };
