@@ -43,11 +43,15 @@ bool check_exit(EventReader<AppExit> exit_events);
 void exit_app(EventWriter<AppExit> exit_events);
 
 struct SystemNode {
+    void* func_ptr;
     const bool in_main_thread;
     std::shared_ptr<Scheduler> scheduler;
+    size_t scheduler_hash;
     const type_info* scheduler_type;
     std::shared_ptr<BasicSystem<void>> system;
     std::unordered_set<std::shared_ptr<condition>> conditions;
+    std::unordered_set<void*> user_defined_before_sys_ptrs;
+    std::unordered_set<void*> user_defined_after_sys_ptrs;
     std::unordered_set<std::shared_ptr<SystemNode>> user_defined_before;
     std::unordered_set<std::shared_ptr<SystemNode>> app_generated_before;
     std::unordered_map<size_t, std::any> sets;
@@ -175,24 +179,24 @@ struct before {
     friend class App;
 
    private:
-    std::vector<std::shared_ptr<SystemNode>> nodes;
+    std::vector<void*> nodes;
 
    public:
     before() {};
     template <typename... Nodes>
-    before(Nodes... nodes) : nodes({nodes...}){};
+    before(Nodes... nodes) : nodes({((void*)nodes)...}){};
 };
 
 struct after {
     friend class App;
 
    private:
-    std::vector<std::shared_ptr<SystemNode>> nodes;
+    std::vector<void*> nodes;
 
    public:
     after() {};
     template <typename... Nodes>
-    after(Nodes... nodes) : nodes({nodes...}){};
+    after(Nodes... nodes) : nodes({((void*)nodes)...}){};
 };
 
 template <typename... Args>
@@ -220,7 +224,7 @@ class App {
         m_in_set_systems;
     std::vector<Command> m_existing_commands;
     std::vector<std::unique_ptr<BasicSystem<void>>> m_state_update;
-    std::vector<std::shared_ptr<SystemNode>> m_systems;
+    std::unordered_map<void*, std::shared_ptr<SystemNode>> m_systems;
     std::unordered_map<size_t, std::shared_ptr<Plugin>> m_plugins;
     std::unordered_map<size_t, std::shared_ptr<SystemRunner>> m_runners;
     std::shared_ptr<BS::thread_pool> m_pool =
@@ -358,9 +362,11 @@ class App {
                             dynamic_cast<SchT*>(systems->scheduler.get()) !=
                                 NULL) {
                             if (before) {
-                                node->user_defined_before.insert(systems);
+                                node->user_defined_before_sys_ptrs.insert(
+                                    systems->func_ptr);
                             } else {
-                                systems->user_defined_before.insert(node);
+                                systems->user_defined_before_sys_ptrs.insert(
+                                    node->func_ptr);
                             }
                         }
                     }
@@ -381,10 +387,41 @@ class App {
     template <typename T>
     void load_runner() {
         auto runner = std::make_shared<SystemRunner>(this, m_pool);
-        for (auto& node : m_systems) {
+        for (auto& [_, node] : m_systems) {
             auto& scheduler = node->scheduler;
             if (scheduler != nullptr &&
                 dynamic_cast<T*>(scheduler.get()) != NULL) {
+                for (auto& sys_before_ptr :
+                     node->user_defined_before_sys_ptrs) {
+                    if (m_systems.find(sys_before_ptr) != m_systems.end()) {
+                        if (dynamic_cast<T*>(
+                                m_systems[sys_before_ptr]->scheduler.get()) !=
+                            NULL) {
+                            node->user_defined_before.insert(
+                                m_systems[sys_before_ptr]);
+                        }
+                    } else {
+                        spdlog::warn(
+                            "System {} not found in system list, ignored.",
+                            sys_before_ptr);
+                    }
+                }
+                for (auto& sys_after_ptr : node->user_defined_after_sys_ptrs) {
+                    if (m_systems.find(sys_after_ptr) != m_systems.end()) {
+                        if (dynamic_cast<T*>(
+                                m_systems[sys_after_ptr]->scheduler.get()) !=
+                            NULL) {
+                            m_systems[sys_after_ptr]
+                                ->user_defined_before.insert(node);
+                        }
+                    } else {
+                        spdlog::warn(
+                            "System {} not found in system list, ignored.",
+                            sys_after_ptr);
+                    }
+                }
+                check_locked(node, node);
+
                 runner->add_system(node);
             }
         }
@@ -494,7 +531,8 @@ class App {
                     for (auto& system2 : in_set_systems[j]) {
                         if (system1->scheduler_type != system2->scheduler_type)
                             continue;
-                        system2->user_defined_before.insert(system1);
+                        system2->user_defined_before_sys_ptrs.insert(
+                            system1->func_ptr);
                     }
                 }
             }
@@ -514,8 +552,7 @@ class App {
      */
     template <typename Sch, typename... Args, typename... Sets>
     App& add_system_inner(
-        Sch scheduler, std::function<void(Args...)> func,
-        std::shared_ptr<SystemNode>* node = nullptr, before befores = before(),
+        Sch scheduler, void (*func)(Args...), before befores = before(),
         after afters = after(),
         std::unordered_set<std::shared_ptr<condition>> conditions = {},
         in_set<Sets...> in_sets = in_set()) {
@@ -523,25 +560,21 @@ class App {
             std::make_shared<Sch>(scheduler),
             std::make_shared<System<Args...>>(System<Args...>(this, func)),
             &typeid(Sch));
+        if (m_systems.find((void*)func) != m_systems.end()) {
+            spdlog::error("System {} already exists.", (void*)func);
+            throw std::runtime_error("System already exists.");
+        }
+        new_node->func_ptr = (void*)func;
+        new_node->scheduler_hash = typeid(Sch).hash_code();
         new_node->conditions = conditions;
-        for (auto& before_node : afters.nodes) {
-            if ((before_node != nullptr) &&
-                (dynamic_cast<Sch*>(before_node->scheduler.get()) != NULL)) {
-                new_node->user_defined_before.insert(before_node);
-            }
+        for (auto& before_sys : afters.nodes) {
+            new_node->user_defined_before_sys_ptrs.insert(before_sys);
         }
-        for (auto& after_node : befores.nodes) {
-            if ((after_node != nullptr) &&
-                (dynamic_cast<Sch*>(after_node->scheduler.get()) != NULL)) {
-                after_node->user_defined_before.insert(new_node);
-            }
-        }
-        if (node != nullptr) {
-            *node = new_node;
+        for (auto& after_sys : befores.nodes) {
+            new_node->user_defined_after_sys_ptrs.insert(after_sys);
         }
         configure_system_sets<Sch>(new_node, in_sets);
-        check_locked(new_node, new_node);
-        m_systems.push_back(new_node);
+        m_systems.insert(std::make_pair((void*)func, new_node));
         return *this;
     }
 
@@ -562,37 +595,8 @@ class App {
     App& add_system(Sch scheduler, void (*func)(Args...), Ts... args) {
         auto args_tuple = std::tuple<Ts...>(args...);
         auto tuple = std::make_tuple(
-            scheduler, std::function<void(Args...)>(func),
-            tuple_get<std::shared_ptr<SystemNode>*>(args_tuple),
-            tuple_get<before>(args_tuple), tuple_get<after>(args_tuple),
-            tuple_get<std::unordered_set<std::shared_ptr<condition>>>(
-                args_tuple),
-            tuple_get_template<in_set>(args_tuple));
-        std::apply([this](auto... args) { add_system_inner(args...); }, tuple);
-        return *this;
-    }
-
-    /*! @brief Add a system.
-     * @tparam Args The types of the arguments for the system.
-     * @param scheduler The scheduler for the system.
-     * @param func The system to be run.
-     * @param befores The systems that should run after this system. If they are
-     * not in same scheduler, this will be ignored when preparing runners.
-     * @param afters The systems that should run before this system. If they are
-     * not in same scheduler, this will be ignored when preparing runners.
-     * @param in_sets The sets that this system belongs to. This will affect the
-     * sequence of the systems. Systems in same set type but different scheduler
-     * will not be affected by this.
-     * @return The App object itself.
-     */
-    template <typename Sch, typename... Args, typename... Ts>
-    App& add_system(
-        Sch scheduler, std::function<void(Args...)> func, Ts... args) {
-        auto args_tuple = std::tuple<Ts...>(args...);
-        auto tuple = std::make_tuple(
-            scheduler, func,
-            tuple_get<std::shared_ptr<SystemNode>*>(args_tuple),
-            tuple_get<before>(args_tuple), tuple_get<after>(args_tuple),
+            scheduler, func, tuple_get<before>(args_tuple),
+            tuple_get<after>(args_tuple),
             tuple_get<std::unordered_set<std::shared_ptr<condition>>>(
                 args_tuple),
             tuple_get_template<in_set>(args_tuple));
@@ -615,8 +619,7 @@ class App {
      */
     template <typename Sch, typename... Args, typename... Sets>
     App& add_system_main_inner(
-        Sch scheduler, std::function<void(Args...)> func,
-        std::shared_ptr<SystemNode>* node = nullptr, before befores = before(),
+        Sch scheduler, void (*func)(Args...), before befores = before(),
         after afters = after(),
         std::unordered_set<std::shared_ptr<condition>> conditions = {},
         in_set<Sets...> in_sets = in_set()) {
@@ -624,25 +627,21 @@ class App {
             std::make_shared<Sch>(scheduler),
             std::make_shared<System<Args...>>(System<Args...>(this, func)),
             &typeid(Sch), true);
+        if (m_systems.find((void*)func) != m_systems.end()) {
+            spdlog::error("System {} already exists.", (void*)func);
+            throw std::runtime_error("System already exists.");
+        }
+        new_node->func_ptr = (void*)func;
+        new_node->scheduler_hash = typeid(Sch).hash_code();
         new_node->conditions = conditions;
-        for (auto& before_node : afters.nodes) {
-            if ((before_node != nullptr) &&
-                (dynamic_cast<Sch*>(before_node->scheduler.get()) != NULL)) {
-                new_node->user_defined_before.insert(before_node);
-            }
+        for (auto& before_sys : afters.nodes) {
+            new_node->user_defined_before_sys_ptrs.insert(before_sys);
         }
-        for (auto& after_node : befores.nodes) {
-            if ((after_node != nullptr) &&
-                (dynamic_cast<Sch*>(after_node->scheduler.get()) != NULL)) {
-                after_node->user_defined_before.insert(new_node);
-            }
-        }
-        if (node != nullptr) {
-            *node = new_node;
+        for (auto& after_sys : befores.nodes) {
+            new_node->user_defined_after_sys_ptrs.insert(after_sys);
         }
         configure_system_sets<Sch>(new_node, in_sets);
-        check_locked(new_node, new_node);
-        m_systems.push_back(new_node);
+        m_systems.insert(std::make_pair((void*)func, new_node));
         return *this;
     }
 
@@ -663,38 +662,8 @@ class App {
     App& add_system_main(Sch scheduler, void (*func)(Args...), Ts... args) {
         auto args_tuple = std::tuple<Ts...>(args...);
         auto tuple = std::make_tuple(
-            scheduler, std::function<void(Args...)>(func),
-            tuple_get<std::shared_ptr<SystemNode>*>(args_tuple),
-            tuple_get<before>(args_tuple), tuple_get<after>(args_tuple),
-            tuple_get<std::unordered_set<std::shared_ptr<condition>>>(
-                args_tuple),
-            tuple_get_template<in_set>(args_tuple));
-        std::apply(
-            [this](auto... args) { add_system_main_inner(args...); }, tuple);
-        return *this;
-    }
-
-    /*! @brief Add a system.
-     * @tparam Args The types of the arguments for the system.
-     * @param scheduler The scheduler for the system.
-     * @param func The system to be run.
-     * @param befores The systems that should run after this system. If they are
-     * not in same scheduler, this will be ignored when preparing runners.
-     * @param afters The systems that should run before this system. If they are
-     * not in same scheduler, this will be ignored when preparing runners.
-     * @param in_sets The sets that this system belongs to. This will affect the
-     * sequence of the systems. Systems in same set type but different scheduler
-     * will not be affected by this.
-     * @return The App object itself.
-     */
-    template <typename Sch, typename... Args, typename... Ts>
-    App& add_system_main(
-        Sch scheduler, std::function<void(Args...)> func, Ts... args) {
-        auto args_tuple = std::tuple<Ts...>(args...);
-        auto tuple = std::make_tuple(
-            scheduler, func,
-            tuple_get<std::shared_ptr<SystemNode>*>(args_tuple),
-            tuple_get<before>(args_tuple), tuple_get<after>(args_tuple),
+            scheduler, func, tuple_get<before>(args_tuple),
+            tuple_get<after>(args_tuple),
             tuple_get<std::unordered_set<std::shared_ptr<condition>>>(
                 args_tuple),
             tuple_get_template<in_set>(args_tuple));
