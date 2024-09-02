@@ -561,7 +561,9 @@ class App {
             std::make_shared<System<Args...>>(System<Args...>(this, func)),
             &typeid(Sch));
         if (m_systems.find((void*)func) != m_systems.end()) {
-            spdlog::error("System {} already exists.", (void*)func);
+            spdlog::error(
+                "System {} : {} already exists.", (void*)func,
+                typeid(func).name());
             throw std::runtime_error("System already exists.");
         }
         new_node->func_ptr = (void*)func;
@@ -628,7 +630,9 @@ class App {
             std::make_shared<System<Args...>>(System<Args...>(this, func)),
             &typeid(Sch), true);
         if (m_systems.find((void*)func) != m_systems.end()) {
-            spdlog::error("System {} already exists.", (void*)func);
+            spdlog::error(
+                "System {} : {} already exists.", (void*)func,
+                typeid(func).name());
             throw std::runtime_error("System already exists.");
         }
         new_node->func_ptr = (void*)func;
